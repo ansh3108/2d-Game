@@ -1,0 +1,31 @@
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+}
+
+#gameCanvas {
+  width: 100%;
+  height: 100vh;
+}
+
+#playerInfo {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 20px;
+}
+
+#controls {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+}
+
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+}
