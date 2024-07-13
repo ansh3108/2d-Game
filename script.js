@@ -7,7 +7,9 @@ let gameState = {
         { x: 0, y: 0 },
         { x: 0, y: 0 }
     ],
-    currentPlayer: 0
+    currentPlayer: 0,
+    wind: 0,
+    projectile: null
 };
 
 function resizeCanvas() {
@@ -34,32 +36,90 @@ function drawBuildings() {
 }
 
 function drawPlayers() {
-    ctx.fillStyle = 'brown';
+    document.querySelectorAll('.gorilla').forEach(el => el.remove());
     gameState.players.forEach((player, index) => {
-        const x = index === 0 ? 50 : canvas.width - 50;
+        const x = index === 0 ? gameState.buildings[0].x + 40 : gameState.buildings[4].x + 40;
         const y = canvas.height - gameState.buildings[index === 0 ? 0 : 4].height;
-        ctx.fillRect(x - 15, y - 30, 30, 30);
+        
+        const gorilla = document.createElement('div');
+        gorilla.className = 'gorilla';
+        gorilla.style.left = `${x - 20}px`;
+        gorilla.style.bottom = `${y}px`;
+        document.body.appendChild(gorilla);
+        
         gameState.players[index] = { x, y };
     });
 }
 
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBuildings();
-    drawPlayers();
+function generateWind() {
+    gameState.wind = Math.floor(Math.random() * 21) - 10;
+    document.getElementById('windSpeed').textContent = gameState.wind;
+}
+
+function switchPlayer() {
+    gameState.currentPlayer = 1 - gameState.currentPlayer;
+    document.getElementById('currentPlayer').textContent = gameState.currentPlayer + 1;
+}
+
+function throwProjectile(angle, power) {
+    const player = gameState.players[gameState.currentPlayer];
+    const projectile = document.createElement('div');
+    projectile.id = 'projectile';
+    projectile.style.left = `${player.x}px`;
+    projectile.style.bottom = `${player.y + 20}px`;
+    document.body.appendChild(projectile);
+
+    let t = 0;
+    const g = 9.81;
+    const radians = angle * Math.PI / 180;
+
+    function updateProjectile() {
+        t += 0.1;
+        const x = player.x + power * Math.cos(radians) * t + (gameState.wind * t);
+        const y = player.y + 20 + (power * Math.sin(radians) * t) - (0.5 * g * t * t);
+
+        projectile.style.left = `${x}px`;
+        projectile.style.bottom = `${y}px`;
+
+        if (y < 0 || x < 0 || x > canvas.width) {
+            document.body.removeChild(projectile);
+            switchPlayer();
+        } else {
+            requestAnimationFrame(updateProjectile);
+        }
+    }
+
+    projectile.style.display = 'block';
+    updateProjectile();
+}
+
+function updatePlayerInfo() {
+    const angle = document.getElementById('angleSlider').value;
+    const power = document.getElementById('powerSlider').value;
+    document.getElementById(`angle${gameState.currentPlayer + 1}`).textContent = angle;
+    document.getElementById(`power${gameState.currentPlayer + 1}`).textContent = power;
 }
 
 function initGame() {
     resizeCanvas();
     generateBuildings();
-    draw();
+    drawBuildings();
+    drawPlayers();
+    generateWind();
+    switchPlayer();
 }
 
-window.addEventListener('resize', () => {
-    resizeCanvas();
-    draw();
-});
+window.addEventListener('resize', initGame);
 
 document.getElementById('newGameBtn').addEventListener('click', initGame);
+
+document.getElementById('throwBtn').addEventListener('click', () => {
+    const angle = parseInt(document.getElementById('angleSlider').value);
+    const power = parseInt(document.getElementById('powerSlider').value);
+    throwProjectile(angle, power);
+});
+
+document.getElementById('angleSlider').addEventListener('input', updatePlayerInfo);
+document.getElementById('powerSlider').addEventListener('input', updatePlayerInfo);
 
 initGame();
