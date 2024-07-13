@@ -4,8 +4,8 @@ const ctx = canvas.getContext('2d');
 let gameState = {
     buildings: [],
     players: [
-        { x: 0, y: 0 },
-        { x: 0, y: 0 }
+        { x: 0, y: 0, score: 0 },
+        { x: 0, y: 0, score: 0 }
     ],
     currentPlayer: 0,
     wind: 0,
@@ -47,7 +47,7 @@ function drawPlayers() {
         gorilla.style.bottom = `${y}px`;
         document.body.appendChild(gorilla);
         
-        gameState.players[index] = { x, y };
+        gameState.players[index] = { ...gameState.players[index], x, y };
     });
 }
 
@@ -84,6 +84,9 @@ function throwProjectile(angle, power) {
         if (y < 0 || x < 0 || x > canvas.width) {
             document.body.removeChild(projectile);
             switchPlayer();
+        } else if (checkCollision(x, y)) {
+            document.body.removeChild(projectile);
+            handleHit();
         } else {
             requestAnimationFrame(updateProjectile);
         }
@@ -91,6 +94,36 @@ function throwProjectile(angle, power) {
 
     projectile.style.display = 'block';
     updateProjectile();
+}
+
+function checkCollision(x, y) {
+    const enemyPlayer = gameState.players[1 - gameState.currentPlayer];
+    const dx = x - enemyPlayer.x;
+    const dy = y - enemyPlayer.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    return distance < 20; // Assuming the gorilla has a radius of 20px
+}
+
+function handleHit() {
+    gameState.players[gameState.currentPlayer].score++;
+    updateScoreDisplay();
+    if (gameState.players[gameState.currentPlayer].score >= 3) {
+        endGame();
+    } else {
+        switchPlayer();
+    }
+}
+
+function updateScoreDisplay() {
+    document.getElementById('score1').textContent = gameState.players[0].score;
+    document.getElementById('score2').textContent = gameState.players[1].score;
+}
+
+function endGame() {
+    const winner = gameState.currentPlayer + 1;
+    document.getElementById('winner').textContent = `Player ${winner}`;
+    document.getElementById('gameOverModal').style.display = 'block';
 }
 
 function updatePlayerInfo() {
@@ -101,17 +134,25 @@ function updatePlayerInfo() {
 }
 
 function initGame() {
+    gameState.players.forEach(player => player.score = 0);
+    updateScoreDisplay();
     resizeCanvas();
     generateBuildings();
     drawBuildings();
     drawPlayers();
     generateWind();
     switchPlayer();
+    document.getElementById('gameOverModal').style.display = 'none';
 }
 
-window.addEventListener('resize', initGame);
+window.addEventListener('resize', () => {
+    resizeCanvas();
+    drawBuildings();
+    drawPlayers();
+});
 
 document.getElementById('newGameBtn').addEventListener('click', initGame);
+document.getElementById('restartBtn').addEventListener('click', initGame);
 
 document.getElementById('throwBtn').addEventListener('click', () => {
     const angle = parseInt(document.getElementById('angleSlider').value);
