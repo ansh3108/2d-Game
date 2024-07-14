@@ -1,85 +1,69 @@
+@import url("https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&display=swap");
+
 body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
-  font-family: Arial, sans-serif;
-}
+  font-family: "Inconsolata", monospace;
+  font-size: 14px;
+  color: white;
+  user-select: none;
+  -webkit-user-select: none;
 
-#gameCanvas {
-  width: 100%;
-  height: 100vh;
-}
-
-#playerInfo {
-  position: absolute;
-  top: 10px;
-  left: 10px;
   display: flex;
-  gap: 20px;
-}
-
-#gameInfo {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background-color: rgba(255, 255, 255, 0.7);
-  padding: 10px;
-  border-radius: 5px;
-}
-
-#controls {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  display: flex;
-  gap: 10px;
+  justify-content: center;
   align-items: center;
+  height: 100%;
+  overflow: hidden;
 }
 
 button {
-  padding: 10px 20px;
-  font-size: 16px;
   cursor: pointer;
+  border: none;
+  color: white;
+  background: transparent;
+  font-family: "Inconsolata", monospace;
+  padding: 10px;
+  font-size: 1em;
 }
 
-input[type="range"] {
-  width: 100px;
+button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
-.gorilla {
-  width: 40px;
-  height: 40px;
+#info-left,
+#info-right {
   position: absolute;
-  background-color: brown;
+  top: 20px;
 }
 
-#projectile {
-  width: 10px;
-  height: 10px;
+#info-left {
+  left: 25px;
+}
+
+#info-right {
+  right: 25px;
+  text-align: right;
+}
+
+#bomb-grab-area {
   position: absolute;
-  background-color: yellow;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  display: none;
+  background-color: transparent;
+  cursor: grab;
 }
 
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0,0,0,0.4);
+#instructions,
+#congratulations {
+  position: absolute;
+  transition: visibility 0s, opacity 0.5s linear;
 }
 
-.modal-content {
-  background-color: #fefefe;
-  margin: 15% auto;
-  padding: 20px;
-  border: 1px solid #888;
-  width: 300px;
-  text-align: center;
+@media (min-height: 535px) {
+  #instructions {
+    min-height: 200px;
+  }
 }
 
 #congratulations {
@@ -128,6 +112,7 @@ input[type="range"] {
   }
 }
 
+/* Basic CSS for the dropdown */
 .dropdown {
   position: relative;
   display: inline-block;
@@ -146,4 +131,62 @@ input[type="range"] {
   background-color: #f9f9f9;
   min-width: 120px;
   box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+}
+
+.dropdown-content a {
+  color: black;
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  font-size: 0.9em;
+}
+
+.dropdown-content a:hover {
+  background-color: #f1f1f1;
+}
+
+/* Show dropdown content when hovering over the button */
+.dropdown:hover .dropdown-content {
+  display: block;
+}
+
+#windmill {
+  position: absolute;
+  right: 0;
+  fill: rgba(255, 255, 255, 0.5);
+  transform-origin: bottom;
+}
+
+#windmill-head {
+  animation-name: rotate;
+  animation-duration: 4s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#wind-info {
+  position: absolute;
+  width: 100px;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+
+
+#fullscreen {
+  all: unset;
+  cursor: pointer;
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
 }
