@@ -102,7 +102,7 @@ function checkCollision(x, y) {
     const dy = y - enemyPlayer.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    return distance < 20; // Assuming the gorilla has a radius of 20px
+    return distance < 20; 
 }
 
 function handleHit() {
@@ -163,4 +163,108 @@ document.getElementById('throwBtn').addEventListener('click', () => {
 document.getElementById('angleSlider').addEventListener('input', updatePlayerInfo);
 document.getElementById('powerSlider').addEventListener('input', updatePlayerInfo);
 
+function showInstructions() {
+    singlePlayerButtonDOM.checked = true;
+    instructionsDOM.style.opacity = 1;
+    instructionsDOM.style.visibility = "visible";
+  }
+  
+  function hideInstructions() {
+    state.bomb.highlight = false;
+    instructionsDOM.style.opacity = 0;
+    instructionsDOM.style.visibility = "hidden";
+  }
+  
+  function showCongratulations() {
+    congratulationsDOM.style.opacity = 1;
+    congratulationsDOM.style.visibility = "visible";
+  }
+  
+  function hideCongratulations() {
+    congratulationsDOM.style.opacity = 0;
+    congratulationsDOM.style.visibility = "hidden";
+  }
+  
+  function generateBackgroundBuilding(index) {
+    const previousBuilding = state.backgroundBuildings[index - 1];
+  
+    const x = previousBuilding
+      ? previousBuilding.x + previousBuilding.width + 4
+      : -300;
+  
+    const minWidth = 60;
+    const maxWidth = 110;
+    const width = minWidth + Math.random() * (maxWidth - minWidth);
+  
+    const smallerBuilding = index < 4 || index >= 13;
+  
+    const minHeight = 80;
+    const maxHeight = 350;
+    const smallMinHeight = 20;
+    const smallMaxHeight = 150;
+    const height = smallerBuilding
+      ? smallMinHeight + Math.random() * (smallMaxHeight - smallMinHeight)
+      : minHeight + Math.random() * (maxHeight - minHeight);
+  
+    state.backgroundBuildings.push({ x, width, height });
+  }
+  
+  function generateBuilding(index) {
+    const previousBuilding = state.buildings[index - 1];
+  
+    const x = previousBuilding
+      ? previousBuilding.x + previousBuilding.width + 4
+      : 0;
+  
+    const minWidth = 80;
+    const maxWidth = 130;
+    const width = minWidth + Math.random() * (maxWidth - minWidth);
+  
+    const smallerBuilding = index <= 1 || index >= 6;
+  
+    const minHeight = 40;
+    const maxHeight = 300;
+    const minHeightGorilla = 30;
+    const maxHeightGorilla = 150;
+  
+    const height = smallerBuilding
+      ? minHeightGorilla + Math.random() * (maxHeightGorilla - minHeightGorilla)
+      : minHeight + Math.random() * (maxHeight - minHeight);
+  
+    const lightsOn = [];
+    for (let i = 0; i < 50; i++) {
+      const light = Math.random() <= 0.33 ? true : false;
+      lightsOn.push(light);
+    }
+  
+    state.buildings.push({ x, width, height, lightsOn });
+  }
+  
+  function calculateScaleAndShift() {
+    const lastBuilding = state.buildings.at(-1);
+    const totalWidthOfTheCity = lastBuilding.x + lastBuilding.width;
+  
+    const horizontalScale = window.innerWidth / totalWidthOfTheCity ?? 1;
+    const verticalScale = window.innerHeight / 500;
+  
+    state.scale = Math.min(horizontalScale, verticalScale);
+  
+    const sceneNeedsToBeShifted = horizontalScale > verticalScale;
+  
+    state.shift = sceneNeedsToBeShifted
+      ? (window.innerWidth - totalWidthOfTheCity * state.scale) / 2
+      : 0;
+  }
+  
+  window.addEventListener("resize", () => {
+    canvas.width = window.innerWidth * window.devicePixelRatio;
+    canvas.height = window.innerHeight * window.devicePixelRatio;
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+    calculateScaleAndShift();
+    initializeBombPosition();
+    initializeWindmillPosition();
+    draw();
+  });
+  
 initGame();
