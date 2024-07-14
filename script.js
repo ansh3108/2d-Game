@@ -1,22 +1,24 @@
 let state = {};
 
-let dragging = false;
-let startX, startY;
+let isDragging = false;
+let dragStartX = undefined;
+let dragStartY = undefined;
 
-let lastTimestamp;
-let animFrameID, timeoutID;
+let previousAnimationTimestamp = undefined;
+let animationFrameRequestID = undefined;
+let delayTimeoutID = undefined;
 
-let simMode = false;
-let simImpact = {};
+let simulationMode = false;
+let simulationImpact = {};
 
-const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+const darkModeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 const settings = {
-  players: 1,
-  mode: darkModeQuery.matches ? "dark" : "light",
+  numberOfPlayers: 1, 
+  mode: darkModeMediaQuery.matches ? "dark" : "light",
 };
 
-const blastRadius = 18;
+const blastHoleRadius = 18;
 
 const canvas = document.getElementById("game");
 canvas.width = window.innerWidth * window.devicePixelRatio;
@@ -25,54 +27,63 @@ canvas.style.width = window.innerWidth + "px";
 canvas.style.height = window.innerHeight + "px";
 const ctx = canvas.getContext("2d");
 
-const windmillElem = document.getElementById("windmill");
-const windmillHeadElem = document.getElementById("windmill-head");
-const windElem = document.getElementById("wind-info");
-const windSpeedElem = document.getElementById("wind-speed");
-const infoLeftElem = document.getElementById("info-left");
-const nameLeftElem = document.querySelector("#info-left .name");
-const angleLeftElem = document.querySelector("#info-left .angle");
-const velocityLeftElem = document.querySelector("#info-left .velocity");
+const windmillDOM = document.getElementById("windmill");
+const windmillHeadDOM = document.getElementById("windmill-head");
+const windInfoDOM = document.getElementById("wind-info");
+const windSpeedDOM = document.getElementById("wind-speed");
+const info1DOM = document.getElementById("info-left");
+const name1DOM = document.querySelector("#info-left .name");
+const angle1DOM = document.querySelector("#info-left .angle");
+const velocity1DOM = document.querySelector("#info-left .velocity");
 
-const infoRightElem = document.getElementById("info-right");
-const nameRightElem = document.querySelector("#info-right .name");
-const angleRightElem = document.querySelector("#info-right .angle");
-const velocityRightElem = document.querySelector("#info-right .velocity");
+const info2DOM = document.getElementById("info-right");
+const name2DOM = document.querySelector("#info-right .name");
+const angle2DOM = document.querySelector("#info-right .angle");
+const velocity2DOM = document.querySelector("#info-right .velocity");
 
-const instructionsElem = document.getElementById("instructions");
-const gameModeElem = document.getElementById("game-mode");
+const instructionsDOM = document.getElementById("instructions");
+const gameModeDOM = document.getElementById("game-mode");
 
-const bombAreaElem = document.getElementById("bomb-grab-area");
+const bombGrabAreaDOM = document.getElementById("bomb-grab-area");
 
-const congratsElem = document.getElementById("congratulations");
-const winnerElem = document.getElementById("winner");
+const congratulationsDOM = document.getElementById("congratulations");
+const winnerDOM = document.getElementById("winner");
 
-const settingsElem = document.getElementById("settings");
-const singlePlayerButtons = document.querySelectorAll(".single-player");
-const twoPlayerButtons = document.querySelectorAll(".two-players");
-const autoPlayButtons = document.querySelectorAll(".auto-play");
-const colorModeButton = document.getElementById("color-mode");
+const settingsDOM = document.getElementById("settings");
+const singlePlayerButtonDOM = document.querySelectorAll(".single-player");
+const twoPlayersButtonDOM = document.querySelectorAll(".two-players");
+const autoPlayButtonDOM = document.querySelectorAll(".auto-play");
+const colorModeButtonDOM = document.getElementById("color-mode");
 
-colorModeButton.addEventListener("click", () => {
-  settings.mode = settings.mode === "dark" ? "light" : "dark";
-  colorModeButton.innerText = settings.mode === "dark" ? "Light Mode" : "Dark Mode";
-  render();
+colorModeButtonDOM.addEventListener("click", () => {
+  if (settings.mode === "dark") {
+    settings.mode = "light";
+    colorModeButtonDOM.innerText = "Dark Mode";
+  } else {
+    settings.mode = "dark";
+    colorModeButtonDOM.innerText = "Light Mode";
+  }
+  draw();
 });
 
-darkModeQuery.addEventListener("change", (e) => {
+darkModeMediaQuery.addEventListener("change", (e) => {
   settings.mode = e.matches ? "dark" : "light";
-  colorModeButton.innerText = settings.mode === "dark" ? "Light Mode" : "Dark Mode";
-  render();
+  if (settings.mode === "dark") {
+    colorModeButtonDOM.innerText = "Light Mode";
+  } else {
+    colorModeButtonDOM.innerText = "Dark Mode";
+  }
+  draw();
 });
 
-startNewGame();
+newGame();
 
-function startNewGame() {
+function newGame() {
   state = {
-    phase: "aiming",
-    player: 1,
+    phase: "aiming", 
+    currentPlayer: 1,
     round: 1,
-    wind: getRandomWindSpeed(),
+    windSpeed: generateWindSpeed(),
     bomb: {
       x: undefined,
       y: undefined,
@@ -80,147 +91,150 @@ function startNewGame() {
       velocity: { x: 0, y: 0 },
       highlight: true,
     },
-    bgBuildings: [],
+
+    backgroundBuildings: [],
     buildings: [],
-    holes: [],
+    blastHoles: [],
+
     stars: [],
+
     scale: 1,
     shift: 0,
   };
 
   for (let i = 0; i < (window.innerWidth * window.innerHeight) / 12000; i++) {
-    const x = Math.random() * window.innerWidth;
-    const y = Math.random() * window.innerHeight;
+    const x = Math.floor(Math.random() * window.innerWidth);
+    const y = Math.floor(Math.random() * window.innerHeight);
     state.stars.push({ x, y });
   }
 
   for (let i = 0; i < 17; i++) {
-    createBgBuilding(i);
+    generateBackgroundBuilding(i);
   }
 
   for (let i = 0; i < 8; i++) {
-    createBuilding(i);
+    generateBuilding(i);
   }
 
-  setScaleAndShift();
-  setupBombPosition();
-  setupWindmillPosition();
-  rotateWindmill();
+  calculateScaleAndShift();
+  initializeBombPosition();
+  initializeWindmillPosition();
+  setWindMillRotation();
 
-  cancelAnimationFrame(animFrameID);
-  clearTimeout(timeoutID);
+  cancelAnimationFrame(animationFrameRequestID);
+  clearTimeout(delayTimeoutID);
 
-  if (settings.players > 0) {
+  if (settings.numberOfPlayers > 0) {
     showInstructions();
   } else {
     hideInstructions();
   }
-  hideCongrats();
-  angleLeftElem.innerText = 0;
-  velocityLeftElem.innerText = 0;
-  angleRightElem.innerText = 0;
-  velocityRightElem.innerText = 0;
+  hideCongratulations();
+  angle1DOM.innerText = 0;
+  velocity1DOM.innerText = 0;
+  angle2DOM.innerText = 0;
+  velocity2DOM.innerText = 0;
 
-  simMode = false;
-  simImpact = {};
+  simulationMode = false;
+  simulationImpact = {};
 
-  render();
+  draw();
 
-  if (settings.players === 0) {
-    autoThrow();
+  if (settings.numberOfPlayers === 0) {
+    computerThrow();
   }
 }
 
 function showInstructions() {
-  singlePlayerButtons[0].checked = true;
-  instructionsElem.style.opacity = 1;
-  instructionsElem.style.visibility = "visible";
+  singlePlayerButtonDOM.checked = true;
+  instructionsDOM.style.opacity = 1;
+  instructionsDOM.style.visibility = "visible";
 }
 
 function hideInstructions() {
   state.bomb.highlight = false;
-  instructionsElem.style.opacity = 0;
-  instructionsElem.style.visibility = "hidden";
+  instructionsDOM.style.opacity = 0;
+  instructionsDOM.style.visibility = "hidden";
 }
 
-function showCongrats() {
-  congratsElem.style.opacity = 1;
-  congratsElem.style.visibility = "visible";
+function showCongratulations() {
+  congratulationsDOM.style.opacity = 1;
+  congratulationsDOM.style.visibility = "visible";
 }
 
-function hideCongrats() {
-  congratsElem.style.opacity = 0;
-  congratsElem.style.visibility = "hidden";
+function hideCongratulations() {
+  congratulationsDOM.style.opacity = 0;
+  congratulationsDOM.style.visibility = "hidden";
 }
 
-function createBgBuilding(index) {
-  const prevBuilding = state.bgBuildings[index - 1];
+function generateBackgroundBuilding(index) {
+  const previousBuilding = state.backgroundBuildings[index - 1];
 
-  const x = prevBuilding
-    ? prevBuilding.x + prevBuilding.width + 4
+  const x = previousBuilding
+    ? previousBuilding.x + previousBuilding.width + 4
     : -300;
 
   const minWidth = 60;
   const maxWidth = 110;
   const width = minWidth + Math.random() * (maxWidth - minWidth);
 
-  const small = index < 4 || index >= 13;
+  const smallerBuilding = index < 4 || index >= 13;
 
   const minHeight = 80;
   const maxHeight = 350;
   const smallMinHeight = 20;
   const smallMaxHeight = 150;
-  const height = small
+  const height = smallerBuilding
     ? smallMinHeight + Math.random() * (smallMaxHeight - smallMinHeight)
     : minHeight + Math.random() * (maxHeight - minHeight);
 
-  state.bgBuildings.push({ x, width, height });
+  state.backgroundBuildings.push({ x, width, height });
 }
 
-function createBuilding(index) {
-  const prevBuilding = state.buildings[index - 1];
+function generateBuilding(index) {
+  const previousBuilding = state.buildings[index - 1];
 
-  const x = prevBuilding
-    ? prevBuilding.x + prevBuilding.width + 4
+  const x = previousBuilding
+    ? previousBuilding.x + previousBuilding.width + 4
     : 0;
 
   const minWidth = 80;
   const maxWidth = 130;
   const width = minWidth + Math.random() * (maxWidth - minWidth);
 
-  const small = index <= 1 || index >= 6;
+  const smallerBuilding = index <= 1 || index >= 6;
 
   const minHeight = 40;
   const maxHeight = 300;
   const minHeightGorilla = 30;
   const maxHeightGorilla = 150;
 
-  const height = small
+  const height = smallerBuilding
     ? minHeightGorilla + Math.random() * (maxHeightGorilla - minHeightGorilla)
     : minHeight + Math.random() * (maxHeight - minHeight);
 
-  const lights = [];
+  const lightsOn = [];
   for (let i = 0; i < 50; i++) {
-    const light = Math.random() <= 0.33;
-    lights.push(light);
+    const light = Math.random() <= 0.33 ? true : false;
+    lightsOn.push(light);
   }
 
-  state.buildings.push({ x, width, height, lights });
+  state.buildings.push({ x, width, height, lightsOn });
 }
 
-function setScaleAndShift() {
+function calculateScaleAndShift() {
   const lastBuilding = state.buildings.at(-1);
-  const cityWidth = lastBuilding.x + lastBuilding.width;
+  const totalWidthOfTheCity = lastBuilding.x + lastBuilding.width;
 
-  const horizScale = window.innerWidth / cityWidth;
-  const vertScale = window.innerHeight / 500;
+  const horizontalScale = window.innerWidth / totalWidthOfTheCity ?? 1;
+  const verticalScale = window.innerHeight / 500;
 
-  state.scale = Math.min(horizScale, vertScale);
+  state.scale = Math.min(horizontalScale, verticalScale);
 
-  const shiftRequired = horizScale > vertScale;
+  const sceneNeedsToBeShifted = horizontalScale > verticalScale;
 
-  state.shift = shiftRequired
-    ? (window.innerWidth - cityWidth * state.scale) / 2
+  state.shift = sceneNeedsToBeShifted
+    ? (window.innerWidth - totalWidthOfTheCity * state.scale) / 2
     : 0;
 }
 
@@ -229,56 +243,59 @@ window.addEventListener("resize", () => {
   canvas.height = window.innerHeight * window.devicePixelRatio;
   canvas.style.width = window.innerWidth + "px";
   canvas.style.height = window.innerHeight + "px";
-  setScaleAndShift();
-  setupBombPosition();
-  setupWindmillPosition();
-  render();
+  calculateScaleAndShift();
+  initializeBombPosition();
+  initializeWindmillPosition();
+  draw();
 });
 
-function setupBombPosition() {
-  const building = state.player === 1 ? state.buildings[1] : state.buildings.at(-2);
+function initializeBombPosition() {
+  const building =
+    state.currentPlayer === 1
+      ? state.buildings.at(1) 
+      : state.buildings.at(-2); 
 
   const gorillaX = building.x + building.width / 2;
   const gorillaY = building.height;
 
-  const handOffsetX = state.player === 1 ? -28 : 28;
-  const handOffsetY = 107;
+  const gorillaHandOffsetX = state.currentPlayer === 1 ? -28 : 28;
+  const gorillaHandOffsetY = 107;
 
-  state.bomb.x = gorillaX + handOffsetX;
-  state.bomb.y = gorillaY + handOffsetY;
+  state.bomb.x = gorillaX + gorillaHandOffsetX;
+  state.bomb.y = gorillaY + gorillaHandOffsetY;
   state.bomb.velocity.x = 0;
   state.bomb.velocity.y = 0;
   state.bomb.rotation = 0;
 
-  const areaRadius = 15;
-  const left = state.bomb.x * state.scale + state.shift - areaRadius;
-  const bottom = state.bomb.y * state.scale - areaRadius;
+  const grabAreaRadius = 15;
+  const left = state.bomb.x * state.scale + state.shift - grabAreaRadius;
+  const bottom = state.bomb.y * state.scale - grabAreaRadius;
 
-  bombAreaElem.style.left = `${left}px`;
-  bombAreaElem.style.bottom = `${bottom}px`;
+  bombGrabAreaDOM.style.left = `${left}px`;
+  bombGrabAreaDOM.style.bottom = `${bottom}px`;
 }
 
-function setupWindmillPosition() {
+function initializeWindmillPosition() {
   const lastBuilding = state.buildings.at(-1);
   let rooftopY = lastBuilding.height * state.scale;
   let rooftopX =
     (lastBuilding.x + lastBuilding.width / 2) * state.scale + state.shift;
 
-  windmillElem.style.bottom = `${rooftopY}px`;
-  windmillElem.style.left = `${rooftopX - 100}px`;
+  windmillDOM.style.bottom = `${rooftopY}px`;
+  windmillDOM.style.left = `${rooftopX - 100}px`;
 
-  windmillElem.style.scale = state.scale;
+  windmillDOM.style.scale = state.scale;
 
-  windElem.style.bottom = `${rooftopY}px`;
-  windElem.style.left = `${rooftopX - 50}px`;
+  windInfoDOM.style.bottom = `${rooftopY}px`;
+  windInfoDOM.style.left = `${rooftopX - 50}px`;
 }
 
-function render() {
+function draw() {
   ctx.save();
 
   ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  drawSky();
+  drawBackgroundSky();
 
   ctx.translate(0, window.innerHeight);
   ctx.scale(1, -1);
@@ -286,267 +303,672 @@ function render() {
   ctx.translate(state.shift, 0);
   ctx.scale(state.scale, state.scale);
 
-  drawStars();
-  drawBackground();
-  drawBuildings();
-  drawHoles();
 
-  drawGorillas();
+
+  drawBackgroundMoon();
+  drawBackgroundBuildings();
+  drawBuildingsWithBlastHoles();
+  drawGorilla(1);
+  drawGorilla(2);
   drawBomb();
-  drawUI();
 
   ctx.restore();
 }
 
-function drawSky() {
+function drawBackgroundSky() {
   const gradient = ctx.createLinearGradient(0, 0, 0, window.innerHeight);
-
   if (settings.mode === "dark") {
-    gradient.addColorStop(0, "rgb(5,  5, 30)");
-    gradient.addColorStop(1, "rgb(40, 5, 45)");
+    gradient.addColorStop(1, "#27507F");
+    gradient.addColorStop(0, "#58A8D8");
   } else {
-    gradient.addColorStop(0, "rgb(5, 120, 210)");
-    gradient.addColorStop(1, "rgb(40, 170, 225)");
+    gradient.addColorStop(1, "#F8BA85");
+    gradient.addColorStop(0, "#FFC28E");
   }
 
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-}
 
-function drawStars() {
   if (settings.mode === "dark") {
+    ctx.fillStyle = "white";
     state.stars.forEach((star) => {
-      ctx.fillStyle = "white";
       ctx.fillRect(star.x, star.y, 1, 1);
     });
   }
 }
 
-function drawBackground() {
-  state.bgBuildings.forEach((building) => {
-    ctx.fillStyle =
-      settings.mode === "dark"
-        ? "rgb(120, 120, 120)"
-        : "rgb(140, 140, 140)";
+function drawBackgroundMoon() {
+  if (settings.mode === "dark") {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctx.beginPath();
+    ctx.arc(
+      window.innerWidth / state.scale - state.shift - 200,
+      window.innerHeight / state.scale - 100,
+      30,
+      0,
+      2 * Math.PI
+    );
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctx.beginPath();
+    ctx.arc(300, 350, 60, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+function drawBackgroundBuildings() {
+  state.backgroundBuildings.forEach((building) => {
+    ctx.fillStyle = settings.mode === "dark" ? "#254D7E" : "#947285";
     ctx.fillRect(building.x, 0, building.width, building.height);
   });
 }
 
+function drawBuildingsWithBlastHoles() {
+  ctx.save();
+
+  state.blastHoles.forEach((blastHole) => {
+    ctx.beginPath();
+
+    ctx.rect(
+      0,
+      0,
+      window.innerWidth / state.scale,
+      window.innerHeight / state.scale
+    );
+
+    ctx.arc(blastHole.x, blastHole.y, blastHoleRadius, 0, 2 * Math.PI, true);
+
+    ctx.clip();
+  });
+
+  drawBuildings();
+
+  ctx.restore();
+}
+
 function drawBuildings() {
   state.buildings.forEach((building) => {
-    ctx.fillStyle =
-      settings.mode === "dark" ? "rgb(50, 50, 50)" : "rgb(100, 100, 100)";
+    ctx.fillStyle = settings.mode === "dark" ? "#152A47" : "#4A3C68";
     ctx.fillRect(building.x, 0, building.width, building.height);
 
-    ctx.fillStyle = "yellow";
+    const windowWidth = 10;
+    const windowHeight = 12;
+    const gap = 15;
 
-    for (let i = 0; i < 50; i++) {
-      if (building.lights[i]) {
-        const x =
-          building.x +
-          4 +
-          Math.floor(i % 5) * (building.width / 5);
-        const y =
-          8 +
-          Math.floor(i / 5) * (building.height / 10);
-        ctx.fillRect(x, y, 4, 4);
+    const numberOfFloors = Math.ceil(
+      (building.height - gap) / (windowHeight + gap)
+    );
+    const numberOfRoomsPerFloor = Math.floor(
+      (building.width - gap) / (windowWidth + gap)
+    );
+
+    for (let floor = 0; floor < numberOfFloors; floor++) {
+      for (let room = 0; room < numberOfRoomsPerFloor; room++) {
+        if (building.lightsOn[floor * numberOfRoomsPerFloor + room]) {
+          ctx.save();
+
+          ctx.translate(building.x + gap, building.height - gap);
+          ctx.scale(1, -1);
+
+          const x = room * (windowWidth + gap);
+          const y = floor * (windowHeight + gap);
+
+          ctx.fillStyle = settings.mode === "dark" ? "#5F76AB" : "#EBB6A2";
+          ctx.fillRect(x, y, windowWidth, windowHeight);
+
+          ctx.restore();
+        }
       }
     }
   });
 }
 
-function drawHoles() {
-  state.holes.forEach((hole) => {
-    ctx.strokeStyle =
-      settings.mode === "dark"
-        ? "rgba(100, 0, 150, 0.9)"
-        : "rgba(255, 0, 0, 0.9)";
-    ctx.beginPath();
-    ctx.arc(hole.x, hole.y, hole.radius, 0, Math.PI * 2);
-    ctx.stroke();
-  });
+function drawGorilla(player) {
+  ctx.save();
+
+  const building =
+    player === 1
+      ? state.buildings.at(1)
+      : state.buildings.at(-2); 
+
+  ctx.translate(building.x + building.width / 2, building.height);
+
+  drawGorillaBody();
+  drawGorillaLeftArm(player);
+  drawGorillaRightArm(player);
+  drawGorillaFace(player);
+  drawGorillaThoughtBubbles(player);
+
+  ctx.restore();
 }
 
-function drawGorillas() {
-  ctx.fillStyle = settings.mode === "dark" ? "red" : "red";
-  ctx.fillRect(
-    state.buildings[1].x + state.buildings[1].width / 2 - 30,
-    state.buildings[1].height,
-    30,
-    100
-  );
+function drawGorillaBody() {
+  ctx.fillStyle = "black";
 
-  if (settings.players === 2) {
-    ctx.fillStyle = settings.mode === "dark" ? "blue" : "blue";
-    ctx.fillRect(
-      state.buildings[state.buildings.length - 2].x +
-        state.buildings[state.buildings.length - 2].width / 2 -
-        30,
-      state.buildings[state.buildings.length - 2].height,
-      30,
-      100
+  ctx.beginPath();
+  ctx.moveTo(0, 15);
+  ctx.lineTo(-7, 0);
+  ctx.lineTo(-20, 0);
+  ctx.lineTo(-17, 18);
+  ctx.lineTo(-20, 44);
+
+  ctx.lineTo(-11, 77);
+  ctx.lineTo(0, 84);
+  ctx.lineTo(11, 77);
+
+  ctx.lineTo(20, 44);
+  ctx.lineTo(17, 18);
+  ctx.lineTo(20, 0);
+  ctx.lineTo(7, 0);
+  ctx.fill();
+}
+
+function drawGorillaLeftArm(player) {
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 18;
+
+  ctx.beginPath();
+  ctx.moveTo(-14, 50);
+
+  if (state.phase === "aiming" && state.currentPlayer === 1 && player === 1) {
+    ctx.quadraticCurveTo(
+      -44,
+      63,
+      -28 - state.bomb.velocity.x / 6.25,
+      107 - state.bomb.velocity.y / 6.25
     );
+  } else if (state.phase === "celebrating" && state.currentPlayer === player) {
+    ctx.quadraticCurveTo(-44, 63, -28, 107);
+  } else {
+    ctx.quadraticCurveTo(-44, 45, -28, 12);
+  }
+
+  ctx.stroke();
+}
+
+function drawGorillaRightArm(player) {
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 18;
+
+  ctx.beginPath();
+  ctx.moveTo(+14, 50);
+
+  if (state.phase === "aiming" && state.currentPlayer === 2 && player === 2) {
+    ctx.quadraticCurveTo(
+      +44,
+      63,
+      +28 - state.bomb.velocity.x / 6.25,
+      107 - state.bomb.velocity.y / 6.25
+    );
+  } else if (state.phase === "celebrating" && state.currentPlayer === player) {
+    ctx.quadraticCurveTo(+44, 63, +28, 107);
+  } else {
+    ctx.quadraticCurveTo(+44, 45, +28, 12);
+  }
+
+  ctx.stroke();
+}
+
+function drawGorillaFace(player) {
+  // Face
+  ctx.fillStyle = settings.mode === "dark" ? "gray" : "lightgray";
+  ctx.beginPath();
+  ctx.arc(0, 63, 9, 0, 2 * Math.PI);
+  ctx.moveTo(-3.5, 70);
+  ctx.arc(-3.5, 70, 4, 0, 2 * Math.PI);
+  ctx.moveTo(+3.5, 70);
+  ctx.arc(+3.5, 70, 4, 0, 2 * Math.PI);
+  ctx.fill();
+
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.arc(-3.5, 70, 1.4, 0, 2 * Math.PI);
+  ctx.moveTo(+3.5, 70);
+  ctx.arc(+3.5, 70, 1.4, 0, 2 * Math.PI);
+  ctx.fill();
+
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 1.4;
+
+  ctx.beginPath();
+  ctx.moveTo(-3.5, 66.5);
+  ctx.lineTo(-1.5, 65);
+  ctx.moveTo(3.5, 66.5);
+  ctx.lineTo(1.5, 65);
+  ctx.stroke();
+
+  ctx.beginPath();
+  if (state.phase === "celebrating" && state.currentPlayer === player) {
+    ctx.moveTo(-5, 60);
+    ctx.quadraticCurveTo(0, 56, 5, 60);
+  } else {
+    ctx.moveTo(-5, 56);
+    ctx.quadraticCurveTo(0, 60, 5, 56);
+  }
+  ctx.stroke();
+}
+
+function drawGorillaThoughtBubbles(player) {
+  if (state.phase === "aiming") {
+    const currentPlayerIsComputer =
+      (settings.numberOfPlayers === 0 &&
+        state.currentPlayer === 1 &&
+        player === 1) ||
+      (settings.numberOfPlayers !== 2 &&
+        state.currentPlayer === 2 &&
+        player === 2);
+
+    if (currentPlayerIsComputer) {
+      ctx.save();
+      ctx.scale(1, -1);
+
+      ctx.font = "20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("?", 0, -90);
+
+      ctx.font = "10px sans-serif";
+
+      ctx.rotate((5 / 180) * Math.PI);
+      ctx.fillText("?", 0, -90);
+
+      ctx.rotate((-10 / 180) * Math.PI);
+      ctx.fillText("?", 0, -90);
+
+      ctx.restore();
+    }
   }
 }
 
 function drawBomb() {
-  ctx.fillStyle = state.bomb.highlight ? "red" : "black";
-  ctx.beginPath();
-  ctx.arc(
-    state.bomb.x,
-    state.bomb.y,
-    10,
-    0,
-    Math.PI * 2
-  );
-  ctx.fill();
+  ctx.save();
+  ctx.translate(state.bomb.x, state.bomb.y);
 
-  ctx.strokeStyle = "white";
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  if (state.phase === "aiming") {
+    ctx.translate(-state.bomb.velocity.x / 6.25, -state.bomb.velocity.y / 6.25);
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.setLineDash([3, 8]);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(state.bomb.velocity.x, state.bomb.velocity.y);
+    ctx.stroke();
+
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, 2 * Math.PI);
+    ctx.fill();
+  } else if (state.phase === "in flight") {
+    ctx.fillStyle = "white";
+    ctx.rotate(state.bomb.rotation);
+    ctx.beginPath();
+    ctx.moveTo(-8, -2);
+    ctx.quadraticCurveTo(0, 12, 8, -2);
+    ctx.quadraticCurveTo(0, 2, -8, -2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  if (state.bomb.y > window.innerHeight / state.scale) {
+    ctx.beginPath();
+    ctx.strokeStyle = "white";
+    const distance = state.bomb.y - window.innerHeight / state.scale;
+    ctx.moveTo(state.bomb.x, window.innerHeight / state.scale - 10);
+    ctx.lineTo(state.bomb.x, window.innerHeight / state.scale - distance);
+    ctx.moveTo(state.bomb.x, window.innerHeight / state.scale - 10);
+    ctx.lineTo(state.bomb.x - 5, window.innerHeight / state.scale - 15);
+    ctx.moveTo(state.bomb.x, window.innerHeight / state.scale - 10);
+    ctx.lineTo(state.bomb.x + 5, window.innerHeight / state.scale - 15);
+    ctx.stroke();
+  }
+
+  if (state.bomb.highlight) {
+    ctx.beginPath();
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.moveTo(state.bomb.x, state.bomb.y + 20);
+    ctx.lineTo(state.bomb.x, state.bomb.y + 120);
+    ctx.moveTo(state.bomb.x, state.bomb.y + 20);
+    ctx.lineTo(state.bomb.x - 5, state.bomb.y + 25);
+    ctx.moveTo(state.bomb.x, state.bomb.y + 20);
+    ctx.lineTo(state.bomb.x + 5, state.bomb.y + 25);
+    ctx.stroke();
+  }
 }
 
-function drawUI() {
-  ctx.fillStyle = "black";
-  ctx.font = "16px Arial";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-
-  ctx.fillText(
-    `Player: ${state.player} | Angle: ${Math.round(
-      state.bomb.angle
-    )} | Velocity: ${Math.round(state.bomb.velocity)}`,
-    10,
-    10
-  );
-}
-
-canvas.addEventListener("mousedown", (e) => {
-  dragging = true;
-  startX = e.clientX;
-  startY = e.clientY;
-});
-
-canvas.addEventListener("mousemove", (e) => {
-  if (dragging) {
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-
-    state.bomb.velocity.x = dx;
-    state.bomb.velocity.y = -dy;
+bombGrabAreaDOM.addEventListener("mousedown", function (e) {
+  hideInstructions();
+  if (state.phase === "aiming") {
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    document.body.style.cursor = "grabbing";
   }
 });
 
-canvas.addEventListener("mouseup", () => {
-  dragging = false;
-  state.phase = "firing";
+window.addEventListener("mousemove", function (e) {
+  if (isDragging) {
+    let deltaX = e.clientX - dragStartX;
+    let deltaY = e.clientY - dragStartY;
 
-  if (settings.players === 0) {
-    simMode = true;
-    simImpact = { x: state.bomb.x, y: state.bomb.y };
+    state.bomb.velocity.x = -deltaX;
+    state.bomb.velocity.y = deltaY;
+    setInfo(deltaX, deltaY);
+
+    draw();
   }
-
-  lastTimestamp = undefined;
-  animFrameID = requestAnimationFrame(update);
 });
 
-function autoThrow() {
-  state.bomb.velocity.x = Math.random() * 20 + 20;
-  state.bomb.velocity.y = Math.random() * 20 + 20;
+function setInfo(deltaX, deltaY) {
+  const hypotenuse = Math.sqrt(deltaX ** 2 + deltaY ** 2);
+  const angleInRadians = Math.asin(deltaY / hypotenuse);
+  const angleInDegrees = (angleInRadians / Math.PI) * 180;
 
-  lastTimestamp = undefined;
-  animFrameID = requestAnimationFrame(update);
+  if (state.currentPlayer === 1) {
+    angle1DOM.innerText = Math.round(angleInDegrees);
+    velocity1DOM.innerText = Math.round(hypotenuse);
+  } else {
+    angle2DOM.innerText = Math.round(angleInDegrees);
+    velocity2DOM.innerText = Math.round(hypotenuse);
+  }
 }
 
-function update(timestamp) {
-  if (!lastTimestamp) {
-    lastTimestamp = timestamp;
+window.addEventListener("mouseup", function () {
+  if (isDragging) {
+    isDragging = false;
+    document.body.style.cursor = "default";
+
+    throwBomb();
+  }
+});
+
+function computerThrow() {
+  const numberOfSimulations = 2 + state.round * 3;
+  const bestThrow = runSimulations(numberOfSimulations);
+
+  initializeBombPosition();
+  state.bomb.velocity.x = bestThrow.velocityX;
+  state.bomb.velocity.y = bestThrow.velocityY;
+  setInfo(bestThrow.velocityX, bestThrow.velocityY);
+
+  draw();
+
+  delayTimeoutID = setTimeout(throwBomb, 1000);
+}
+
+function runSimulations(numberOfSimulations) {
+  let bestThrow = {
+    velocityX: undefined,
+    velocityY: undefined,
+    distance: Infinity,
+  };
+  simulationMode = true;
+
+  const enemyBuilding =
+    state.currentPlayer === 1
+      ? state.buildings.at(-2)
+      : state.buildings.at(1)
+  const enemyX = enemyBuilding.x + enemyBuilding.width / 2;
+  const enemyY = enemyBuilding.height + 30;
+
+  for (let i = 0; i < numberOfSimulations; i++) {
+    const angleInDegrees = -10 + Math.random() * 100;
+    const angleInRadians = (angleInDegrees / 180) * Math.PI;
+    const velocity = 40 + Math.random() * 130;
+
+    const direction = state.currentPlayer === 1 ? 1 : -1;
+    const velocityX = Math.cos(angleInRadians) * velocity * direction;
+    const velocityY = Math.sin(angleInRadians) * velocity;
+
+    initializeBombPosition();
+    state.bomb.velocity.x = velocityX;
+    state.bomb.velocity.y = velocityY;
+
+    throwBomb();
+
+    const distance = Math.sqrt(
+      (enemyX - simulationImpact.x) ** 2 + (enemyY - simulationImpact.y) ** 2
+    );
+
+    if (distance < bestThrow.distance) {
+      bestThrow = { velocityX, velocityY, distance };
+    }
   }
 
-  const deltaTime = (timestamp - lastTimestamp) / 1000;
-  lastTimestamp = timestamp;
+  simulationMode = false;
+  return bestThrow;
+}
 
-  state.bomb.velocity.y -= 10 * deltaTime;
+function throwBomb() {
+  if (simulationMode) {
+    previousAnimationTimestamp = 0;
+    animate(16);
+  } else {
+    state.phase = "in flight";
+    previousAnimationTimestamp = undefined;
+    animationFrameRequestID = requestAnimationFrame(animate);
+  }
+}
 
-  state.bomb.x += state.bomb.velocity.x * deltaTime;
-  state.bomb.y += state.bomb.velocity.y * deltaTime;
-
-  state.bomb.rotation += 2 * Math.PI * deltaTime;
-
-  if (state.bomb.y <= 0) {
-    createHole();
-    nextTurn();
+function animate(timestamp) {
+  if (previousAnimationTimestamp === undefined) {
+    previousAnimationTimestamp = timestamp;
+    animationFrameRequestID = requestAnimationFrame(animate);
     return;
   }
 
+  const elapsedTime = timestamp - previousAnimationTimestamp;
+
+  const hitDetectionPrecision = 10;
+  for (let i = 0; i < hitDetectionPrecision; i++) {
+    moveBomb(elapsedTime / hitDetectionPrecision);
+
+    const miss = checkFrameHit() || checkBuildingHit(); 
+    const hit = checkGorillaHit();
+
+    if (simulationMode && (hit || miss)) {
+      simulationImpact = { x: state.bomb.x, y: state.bomb.y };
+      return;
+    }
+
+    if (miss) {
+      state.currentPlayer = state.currentPlayer === 1 ? 2 : 1;
+      if (state.currentPlayer === 1) state.round++;
+      state.phase = "aiming";
+      initializeBombPosition();
+
+      draw();
+
+      const computerThrowsNext =
+        settings.numberOfPlayers === 0 ||
+        (settings.numberOfPlayers === 1 && state.currentPlayer === 2);
+
+      if (computerThrowsNext) setTimeout(computerThrow, 50);
+
+      return;
+    }
+
+    if (hit) {
+      state.phase = "celebrating";
+      announceWinner();
+
+      draw();
+      return;
+    }
+  }
+
+  if (!simulationMode) draw();
+
+  previousAnimationTimestamp = timestamp;
+  if (simulationMode) {
+    animate(timestamp + 16);
+  } else {
+    animationFrameRequestID = requestAnimationFrame(animate);
+  }
+}
+
+function moveBomb(elapsedTime) {
+  const multiplier = elapsedTime / 200;
+
+  state.bomb.velocity.x += state.windSpeed * multiplier;
+
+  state.bomb.velocity.y -= 20 * multiplier;
+
+  state.bomb.x += state.bomb.velocity.x * multiplier;
+  state.bomb.y += state.bomb.velocity.y * multiplier;
+
+  const direction = state.currentPlayer === 1 ? -1 : +1;
+  state.bomb.rotation += direction * 5 * multiplier;
+}
+
+function checkFrameHit() {
   if (
-    state.bomb.x < 0 ||
-    state.bomb.x > window.innerWidth / state.scale
+    state.bomb.y < 0 ||
+    state.bomb.x < -state.shift / state.scale ||
+    state.bomb.x > (window.innerWidth - state.shift) / state.scale
   ) {
-    createHole();
-    nextTurn();
-    return;
-  }
-
-  animFrameID = requestAnimationFrame(update);
-  render();
-}
-
-function createHole() {
-  const holeX = state.bomb.x;
-  const holeY = state.bomb.y;
-  const holeRadius = blastRadius;
-
-  state.holes.push({ x: holeX, y: holeY, radius: holeRadius });
-
-  checkForWinner();
-}
-
-function nextTurn() {
-  state.phase = "aiming";
-  state.player = state.player === 1 ? 2 : 1;
-
-  setupBombPosition();
-  render();
-
-  if (settings.players === 0) {
-    autoThrow();
+    return true; 
   }
 }
 
-function checkForWinner() {
-  const leftGorilla = state.buildings[1];
-  const rightGorilla = state.buildings[state.buildings.length - 2];
+function checkBuildingHit() {
+  for (let i = 0; i < state.buildings.length; i++) {
+    const building = state.buildings[i];
+    if (
+      state.bomb.x + 4 > building.x &&
+      state.bomb.x - 4 < building.x + building.width &&
+      state.bomb.y - 4 < 0 + building.height
+    ) {
+      for (let j = 0; j < state.blastHoles.length; j++) {
+        const blastHole = state.blastHoles[j];
 
-  const leftGorillaHit =
-    state.bomb.x > leftGorilla.x &&
-    state.bomb.x < leftGorilla.x + leftGorilla.width &&
-    state.bomb.y < leftGorilla.height + 100;
+        const horizontalDistance = state.bomb.x - blastHole.x;
+        const verticalDistance = state.bomb.y - blastHole.y;
+        const distance = Math.sqrt(
+          horizontalDistance ** 2 + verticalDistance ** 2
+        );
+        if (distance < blastHoleRadius) {
+          return false;
+        }
+      }
 
-  const rightGorillaHit =
-    state.bomb.x > rightGorilla.x &&
-    state.bomb.x < rightGorilla.x + rightGorilla.width &&
-    state.bomb.y < rightGorilla.height + 100;
-
-  if (leftGorillaHit || rightGorillaHit) {
-    showCongrats();
-    winnerElem.innerText = leftGorillaHit ? "Player 2 Wins!" : "Player 1 Wins!";
-    return;
+      if (!simulationMode) {
+        state.blastHoles.push({ x: state.bomb.x, y: state.bomb.y });
+      }
+      return true;
+    }
   }
-
-  nextTurn();
 }
 
-function getRandomWindSpeed() {
-  const windSpeed = (Math.random() - 0.5) * 10;
-  windSpeedElem.innerText = windSpeed.toFixed(1);
-  return windSpeed;
+function checkGorillaHit() {
+  const enemyPlayer = state.currentPlayer === 1 ? 2 : 1;
+  const enemyBuilding =
+    enemyPlayer === 1
+      ? state.buildings.at(1)
+      : state.buildings.at(-2); 
+
+  ctx.save();
+
+  ctx.translate(
+    enemyBuilding.x + enemyBuilding.width / 2,
+    enemyBuilding.height
+  );
+
+  drawGorillaBody();
+  let hit = ctx.isPointInPath(state.bomb.x, state.bomb.y);
+
+  drawGorillaLeftArm(enemyPlayer);
+  hit ||= ctx.isPointInStroke(state.bomb.x, state.bomb.y);
+
+  drawGorillaRightArm(enemyPlayer);
+  hit ||= ctx.isPointInStroke(state.bomb.x, state.bomb.y);
+
+  ctx.restore();
+
+  return hit;
 }
 
-function rotateWindmill() {
-  windmillHeadElem.style.transform = `rotate(${
-    state.wind * 10
-  }deg)`;
+function announceWinner() {
+  if (settings.numberOfPlayers === 0) {
+    winnerDOM.innerText = `Computer ${state.currentPlayer}`;
+  } else if (settings.numberOfPlayers === 1 && state.currentPlayer === 1) {
+    winnerDOM.innerText = `You`;
+  } else if (settings.numberOfPlayers === 1 && state.currentPlayer === 2) {
+    winnerDOM.innerText = `Computer`;
+  } else {
+    winnerDOM.innerText = `Player ${state.currentPlayer}`;
+  }
+  showCongratulations();
+}
 
-  setTimeout(rotateWindmill, 100);
+singlePlayerButtonDOM.forEach((button) =>
+  button.addEventListener("click", () => {
+    settings.numberOfPlayers = 1;
+    gameModeDOM.innerHTML = "Player vs. Computer";
+    name1DOM.innerText = "Player";
+    name2DOM.innerText = "Computer";
+
+    newGame();
+  })
+);
+
+twoPlayersButtonDOM.forEach((button) =>
+  button.addEventListener("click", () => {
+    settings.numberOfPlayers = 2;
+    gameModeDOM.innerHTML = "Player vs. Player";
+    name1DOM.innerText = "Player 1";
+    name2DOM.innerText = "Player 2";
+
+    newGame();
+  })
+);
+
+autoPlayButtonDOM.forEach((button) =>
+  button.addEventListener("click", () => {
+    settings.numberOfPlayers = 0;
+    name1DOM.innerText = "Computer 1";
+    name2DOM.innerText = "Computer 2";
+
+    newGame();
+  })
+);
+
+function generateWindSpeed() {
+  return -10 + Math.random() * 20;
+}
+
+function setWindMillRotation() {
+  const rotationSpeed = Math.abs(50 / state.windSpeed);
+  windmillHeadDOM.style.animationDirection =
+    state.windSpeed > 0 ? "normal" : "reverse";
+  windmillHeadDOM.style.animationDuration = `${rotationSpeed}s`;
+
+  windSpeedDOM.innerText = Math.round(state.windSpeed);
+}
+
+window.addEventListener("mousemove", function (e) {
+  settingsDOM.style.opacity = 1;
+  info1DOM.style.opacity = 1;
+  info2DOM.style.opacity = 1;
+});
+
+const enterFullscreen = document.getElementById("enter-fullscreen");
+const exitFullscreen = document.getElementById("exit-fullscreen");
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+    enterFullscreen.setAttribute("stroke", "transparent");
+    exitFullscreen.setAttribute("stroke", "white");
+  } else {
+    document.exitFullscreen();
+    enterFullscreen.setAttribute("stroke", "white");
+    exitFullscreen.setAttribute("stroke", "transparent");
+  }
 }
